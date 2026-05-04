@@ -1,0 +1,62 @@
+mode: "ai"
+
+ai_config:
+  api_base: "https://api.openai.com/v1/chat/completions"
+  model: "gpt-3.5-turbo"
+  api_keys:
+    - "sk-your-api-key"
+  key_rotation: "round_robin"
+  target_rpm: 100
+  max_duration: 300
+  input_strategy: "random_text"
+  user_prompt: ""
+  prompt_template: "short"
+  input_token_range: [50, 200]
+  stream: false
+  timeout:
+    connection: 10
+    read: 60
+    total: 120
+
+http_config:
+  target_url: "https://api.example.com/v1/data"
+  method: "POST"
+  headers:
+    Content-Type: "application/json"
+    Authorization: "Bearer your-token"
+  body: |
+    {"query": "test"}
+  load_type: "fixed_qps"
+  target_qps: 100
+  concurrency: 50
+  step_config:
+    start_qps: 100
+    step_size: 100
+    step_duration: 60
+    max_qps: 1000
+  assertions:
+    - type: "status_code"
+      expected: 200
+  timeout:
+    connection: 10
+    read: 30
+    total: 60
+
+general:
+  max_workers: 500
+  report_dir: "./reports"
+  save_raw_data: true
+  dashboard_port: 8080
+  log_level: "info"
+
+simple_config:
+  url: "https://example.com"
+  method: "GET"
+  headers:
+    Content-Type: "application/json"
+  body: null
+  target_rpm: 100
+  max_duration: 60
+  max_workers: 1000
+  stop_on_error: false
+  timeout: 30

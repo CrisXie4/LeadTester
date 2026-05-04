@@ -139,6 +139,7 @@
     <button class="nav-btn active" onclick="switchTab('config')">配置</button>
     <button class="nav-btn" onclick="switchTab('monitor')">监控</button>
     <button class="nav-btn" onclick="switchTab('reports')">报告</button>
+    <button class="nav-btn" onclick="switchTab('settings')">设置</button>
   </div>
   <div class="header-right">
     <a class="credit-link" href="https://github.com/CrisXie4/LeadTester" target="_blank" rel="noopener noreferrer">Made By CrisXie</a>
@@ -351,9 +352,8 @@
     <div class="btn-group">
       <button class="btn btn-primary" id="btn-start" onclick="startTest()">启动测压</button>
       <button class="btn btn-danger" id="btn-stop" onclick="stopTest()" style="display:none">停止</button>
-      <button class="btn" onclick="copyShareLink()">分享压测链接</button>
+      <button class="btn" onclick="loadConfigToForm()">从配置文件加载</button>
     </div>
-    <p class="form-hint" style="margin-top:10px">分享链接会把当前表单参数写入 URL，不需要后端或数据库；请勿在链接里分享真实 API Key。</p>
   </div>
 </div>
 
@@ -428,6 +428,19 @@
   </div>
 </div>
 
+<!-- Tab: Settings -->
+<div class="tab-page" id="page-settings">
+  <div class="card">
+    <div class="card-title">配置文件 (config/config.yaml)</div>
+    <textarea id="settings-yaml" style="width:100%;height:420px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:14px;border-radius:6px;font-family:'Cascadia Code','Fira Code',monospace;font-size:13px;line-height:1.6;resize:vertical;tab-size:2"></textarea>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="saveSettings()">保存配置</button>
+      <button class="btn" onclick="loadSettings()">重新加载</button>
+    </div>
+    <p class="form-hint" style="margin-top:10px">修改后点击保存，下次启动测压时生效。</p>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -435,12 +448,10 @@
 // ===== State =====
 let currentMode = 'ai';
 let ws = null;
-let backendAvailable = false;
 let rpsHistory = [];
 let latencyHistory = [];
 const MAX_HISTORY = 120;
 let logOffset = 0;
-const SHARE_PARAM = 'c';
 
 // ===== Navigation =====
 function switchTab(name) {
@@ -448,10 +459,11 @@ function switchTab(name) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn')[
-    name === 'config' ? 0 : name === 'monitor' ? 1 : 2
+    name === 'config' ? 0 : name === 'monitor' ? 1 : name === 'reports' ? 2 : 3
   ].classList.add('active');
 
   if (name === 'reports') loadReports();
+  if (name === 'settings') loadSettings();
 }
 
 function switchMode(mode) {
@@ -461,49 +473,6 @@ function switchMode(mode) {
   document.getElementById('config-ai').style.display = mode === 'ai' ? '' : 'none';
   document.getElementById('config-http').style.display = mode === 'http' ? '' : 'none';
   document.getElementById('config-simple').style.display = mode === 'simple' ? '' : 'none';
-}
-
-function encodeShareConfig(config) {
-  return btoa(unescape(encodeURIComponent(JSON.stringify(config))))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
-}
-
-function decodeShareConfig(str) {
-  const normalized = str.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
-  return JSON.parse(decodeURIComponent(escape(atob(padded))));
-}
-
-async function copyShareLink() {
-  const url = new URL(location.href);
-  const shareConfig = JSON.parse(JSON.stringify(buildConfig()));
-  if (shareConfig.ai_config) shareConfig.ai_config.api_keys = [];
-  url.searchParams.set(SHARE_PARAM, encodeShareConfig(shareConfig));
-  url.hash = '';
-  const shareUrl = url.toString();
-
-  try {
-    await navigator.clipboard.writeText(shareUrl);
-    showToast('分享链接已复制', 'success');
-  } catch {
-    window.prompt('复制这个分享链接', shareUrl);
-  }
-}
-
-function loadSharedConfigFromUrl() {
-  const raw = new URLSearchParams(location.search).get(SHARE_PARAM);
-  if (!raw) return false;
-
-  try {
-    applyConfigToForm(decodeShareConfig(raw));
-    showToast('已加载分享链接中的配置', 'success');
-    return true;
-  } catch (err) {
-    showToast('分享链接解析失败: ' + err.message, 'error');
-    return false;
-  }
 }
 
 function toggleStepConfig() {
@@ -608,13 +577,6 @@ async function startTest() {
   const btn = document.getElementById('btn-start');
   btn.disabled = true; btn.textContent = '启动中...';
 
-  if (!backendAvailable) {
-    btn.disabled = false; btn.textContent = '启动测压';
-    showToast('当前是静态部署，只能分享/编辑配置；真正发压需要本地后端或 CLI', 'error');
-    appendLog({ time: new Date().toLocaleTimeString('zh-CN'), message: '静态模式：已生成配置，可点击“分享压测链接”发给别人。' });
-    return;
-  }
-
   try {
     const resp = await fetch('/api/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) });
     const data = await resp.json();
@@ -652,14 +614,10 @@ function setRunning(running) {
 
 // ===== Reports =====
 async function loadReports() {
-  const list = document.getElementById('report-list');
-  if (!backendAvailable) {
-    list.innerHTML = '<div class="empty"><div class="icon">📂</div><div class="hint">静态部署不保存历史报告</div></div>';
-    return;
-  }
   try {
     const resp = await fetch('/api/reports');
     const data = await resp.json();
+    const list = document.getElementById('report-list');
     if (!data.reports || data.reports.length === 0) {
       list.innerHTML = '<div class="empty"><div class="icon">📂</div><div class="hint">暂无报告，完成一次测压后自动生成</div></div>';
       return;
@@ -679,10 +637,6 @@ async function loadReports() {
 
 // ===== Settings =====
 async function loadSettings() {
-  if (!backendAvailable) {
-    document.getElementById('settings-yaml').value = '# 静态部署无法读取 config/config.yaml\n# 请在配置页编辑参数，并使用“分享压测链接”同步给别人。';
-    return;
-  }
   try {
     const resp = await fetch('/api/config/default');
     const data = await resp.json();
@@ -694,10 +648,6 @@ async function loadSettings() {
 
 async function saveSettings() {
   const yamlStr = document.getElementById('settings-yaml').value;
-  if (!backendAvailable) {
-    showToast('静态部署无法保存到服务器，请使用分享链接', 'error');
-    return;
-  }
   try {
     const resp = await fetch('/api/config/save', {
       method: 'POST',
@@ -716,10 +666,6 @@ async function saveSettings() {
 }
 
 async function loadConfigToForm() {
-  if (!backendAvailable) {
-    showToast('静态部署无法读取配置文件，请使用分享链接', 'error');
-    return;
-  }
   try {
     const resp = await fetch('/api/config/parsed');
     const data = await resp.json();
@@ -867,7 +813,6 @@ function applyConfigToForm(c) {
 
 // ===== WebSocket =====
 function connectWS() {
-  if (!backendAvailable) return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
 
@@ -884,9 +829,7 @@ function connectWS() {
     }
   };
 
-  ws.onclose = () => {
-    if (backendAvailable) setTimeout(connectWS, 2000);
-  };
+  ws.onclose = () => setTimeout(connectWS, 2000);
 }
 
 function updateMonitor(d) {
@@ -1055,20 +998,26 @@ function showToast(msg, type = '') {
 
 // ===== Init =====
 async function init() {
-  loadSharedConfigFromUrl();
+  connectWS();
+  loadSettings();
 
   // Check current status
   try {
     const resp = await fetch('/api/status');
     const data = await resp.json();
-    backendAvailable = true;
-    connectWS();
     if (data.status === 'running') setRunning(true);
-  } catch {
-    backendAvailable = false;
-    appendLog({ time: new Date().toLocaleTimeString('zh-CN'), message: '静态模式：后端不可用，支持配置分享，不支持服务器发压和报告保存。' });
-  }
+  } catch {}
 
+  // Tab key support in YAML editor
+  document.getElementById('settings-yaml').addEventListener('keydown', function(e) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = this.selectionStart;
+      const end = this.selectionEnd;
+      this.value = this.value.substring(0, start) + '  ' + this.value.substring(end);
+      this.selectionStart = this.selectionEnd = start + 2;
+    }
+  });
 }
 
 init();
