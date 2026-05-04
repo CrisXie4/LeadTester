@@ -32,6 +32,9 @@ export class HTTPMode {
       case 'step':
         this._log(`  阶梯: ${config.step_config.start_qps} -> ${config.step_config.max_qps} (步长 ${config.step_config.step_size}, 每阶段 ${config.step_config.step_duration}s)`);
         return this._runStep();
+      case 'ramp':
+        this._log(`  渐进加压: ${config.ramp_config.start_qps} -> ${config.ramp_config.max_qps} (${config.ramp_config.duration}s)`);
+        return this._runRamp();
       default:
         throw new Error(`不支持的加压类型: ${config.load_type}`);
     }
@@ -133,6 +136,41 @@ export class HTTPMode {
     }
 
     this._stopSnapshot();
+    return this.metrics.getSnapshot();
+  }
+
+  /** 渐进加压模式 */
+  async _runRamp() {
+    const { config } = this;
+    const ramp = config.ramp_config || {};
+    const startQps = Math.max(1, Number(ramp.start_qps || 1));
+    const maxQps = Math.max(startQps, Number(ramp.max_qps || config.target_qps || startQps));
+    const duration = Math.max(1, Number(ramp.duration || config.timeout?.total || 60));
+    const startedAt = Date.now();
+
+    const limiter = new RampRateLimiter({
+      startRate: startQps,
+      endRate: maxQps,
+      durationSec: duration,
+      startedAt,
+    });
+
+    this._pool = new WorkerPool({
+      maxWorkers: config.max_workers || 500,
+      duration,
+      targetRps: maxQps,
+    });
+
+    this._startSnapshot();
+    try {
+      await this._pool.run(
+        (workerId) => this._sendRequest(workerId),
+        limiter,
+      );
+    } finally {
+      this._stopSnapshot();
+    }
+
     return this.metrics.getSnapshot();
   }
 
@@ -260,4 +298,52 @@ function resolveVariables(str) {
     while (result.includes(k)) result = result.replace(k, v());
   }
   return result;
+}
+
+class RampRateLimiter {
+  constructor({ startRate, endRate, durationSec, startedAt }) {
+    this.startRate = startRate;
+    this.endRate = endRate;
+    this.durationSec = durationSec;
+    this.startedAt = startedAt;
+    this.tokens = Math.max(1, Math.ceil(startRate / 10));
+    this.lastRefill = Date.now();
+  }
+
+  async acquire() {
+    this._refill();
+
+    if (this.tokens >= 1) {
+      this.tokens -= 1;
+      return 0;
+    }
+
+    const rate = this._currentRate();
+    const deficit = 1 - this.tokens;
+    const waitMs = (deficit / rate) * 1000;
+    await sleep(waitMs);
+
+    this._refill();
+    this.tokens -= 1;
+    return waitMs;
+  }
+
+  _currentRate() {
+    const elapsedSec = Math.max(0, (Date.now() - this.startedAt) / 1000);
+    const progress = Math.min(1, elapsedSec / this.durationSec);
+    return this.startRate + (this.endRate - this.startRate) * progress;
+  }
+
+  _refill() {
+    const now = Date.now();
+    const elapsed = (now - this.lastRefill) / 1000;
+    const rate = this._currentRate();
+    const capacity = Math.max(1, Math.ceil(rate / 10));
+    this.tokens = Math.min(capacity, this.tokens + elapsed * rate);
+    this.lastRefill = now;
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }

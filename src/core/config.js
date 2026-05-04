@@ -34,6 +34,11 @@ const DEFAULT_CONFIG = {
       step_duration: 60,
       max_qps: 1000,
     },
+    ramp_config: {
+      start_qps: 10,
+      max_qps: 1000,
+      duration: 300,
+    },
     assertions: [],
     timeout: { connection: 10, read: 30, total: 60 },
   },

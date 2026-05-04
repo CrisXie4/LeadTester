@@ -7,7 +7,7 @@ Made By [CrisXie](https://github.com/CrisXie4/LeadTester)
 ## 功能特性
 
 - AI 接口压测：支持接口地址、模型、API Key 列表、Key 轮询策略、目标 RPM、流式输出和超时设置。
-- HTTP 接口压测：支持 URL、请求方法、Headers、Body、固定 QPS、固定并发、阶梯加压和状态码断言。
+- HTTP 接口压测：支持 URL、请求方法、Headers、Body、固定 QPS、固定并发、阶梯加压、渐进加压和状态码断言。
 - 简易 HTTP 压测：适合快速填写目标地址、RPM、持续时间、并发数和超时时间。
 - 实时监控：展示 RPS、RPM、总请求数、成功/失败数、错误率、平均延迟、P50/P90/P95/P99。
 - 错误详情：记录最近错误、状态码、错误类型、延迟和响应内容预览。

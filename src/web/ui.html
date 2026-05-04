@@ -258,6 +258,7 @@
             <option value="fixed_qps">固定 QPS</option>
             <option value="fixed_concurrency">固定并发</option>
             <option value="step">阶梯加压</option>
+            <option value="ramp">渐进加压</option>
           </select>
         </div>
         <div class="form-group">
@@ -290,6 +291,16 @@
           <div class="form-group"><label>步长</label><input id="step-size" type="number" value="100"></div>
           <div class="form-group"><label>每阶段时长 (秒)</label><input id="step-duration" type="number" value="60"></div>
           <div class="form-group"><label>最大 QPS</label><input id="step-max" type="number" value="1000"></div>
+        </div>
+      </div>
+
+      <!-- Ramp config -->
+      <div id="ramp-config" style="display:none">
+        <div class="section-title">渐进加压参数</div>
+        <div class="form-grid">
+          <div class="form-group"><label>起始 QPS</label><input id="ramp-start" type="number" value="10"></div>
+          <div class="form-group"><label>目标 QPS</label><input id="ramp-max" type="number" value="1000"></div>
+          <div class="form-group"><label>爬坡时长 (秒)</label><input id="ramp-duration" type="number" value="300"></div>
         </div>
       </div>
 
@@ -478,8 +489,9 @@ function switchMode(mode) {
 function toggleStepConfig() {
   const v = document.getElementById('http-load-type').value;
   document.getElementById('step-config').style.display = v === 'step' ? '' : 'none';
+  document.getElementById('ramp-config').style.display = v === 'ramp' ? '' : 'none';
   document.getElementById('http-qps').closest('.form-group').style.display = v === 'fixed_concurrency' ? 'none' : '';
-  document.getElementById('http-concurrency').closest('.form-group').style.display = v === 'fixed_qps' || v === 'step' ? 'none' : '';
+  document.getElementById('http-concurrency').closest('.form-group').style.display = v === 'fixed_qps' || v === 'step' || v === 'ramp' ? 'none' : '';
 }
 
 // ===== Build Config =====
@@ -529,6 +541,11 @@ function buildConfig() {
           step_size: Number(document.getElementById('step-size').value),
           step_duration: Number(document.getElementById('step-duration').value),
           max_qps: Number(document.getElementById('step-max').value),
+        },
+        ramp_config: {
+          start_qps: Number(document.getElementById('ramp-start').value),
+          max_qps: Number(document.getElementById('ramp-max').value),
+          duration: Number(document.getElementById('ramp-duration').value),
         },
         assertions: [{ type: 'status_code', expected: Number(document.getElementById('http-assert-status').value) }],
         timeout: {
@@ -711,6 +728,11 @@ async function loadConfigToForm() {
       if (h.step_config.step_duration) document.getElementById('step-duration').value = h.step_config.step_duration;
       if (h.step_config.max_qps) document.getElementById('step-max').value = h.step_config.max_qps;
     }
+    if (h.ramp_config) {
+      if (h.ramp_config.start_qps) document.getElementById('ramp-start').value = h.ramp_config.start_qps;
+      if (h.ramp_config.max_qps) document.getElementById('ramp-max').value = h.ramp_config.max_qps;
+      if (h.ramp_config.duration) document.getElementById('ramp-duration').value = h.ramp_config.duration;
+    }
     if (h.assertions && h.assertions[0]) {
       if (h.assertions[0].expected) document.getElementById('http-assert-status').value = h.assertions[0].expected;
     }
@@ -792,6 +814,11 @@ function applyConfigToForm(c) {
     set('step-size', h.step_config.step_size);
     set('step-duration', h.step_config.step_duration);
     set('step-max', h.step_config.max_qps);
+  }
+  if (h.ramp_config) {
+    set('ramp-start', h.ramp_config.start_qps);
+    set('ramp-max', h.ramp_config.max_qps);
+    set('ramp-duration', h.ramp_config.duration);
   }
   if (h.assertions && h.assertions[0]) set('http-assert-status', h.assertions[0].expected);
 
