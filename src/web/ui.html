@@ -613,17 +613,35 @@ async function startTest() {
 }
 
 async function stopTest() {
+  const btn = document.getElementById('btn-stop');
+  btn.disabled = true;
+  btn.textContent = '停止中...';
   try {
-    await fetch('/api/stop', { method: 'POST' });
-    showToast('正在停止...', 'success');
+    const resp = await fetch('/api/stop', { method: 'POST' });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok && data.ok) {
+      showToast(data.message || '正在停止...', 'success');
+    } else if (data.error === '没有正在运行的测试') {
+      setRunning(false);
+      showToast('当前没有正在运行的测试', 'error');
+    } else {
+      btn.disabled = false;
+      btn.textContent = '停止';
+      showToast('停止失败: ' + (data.error || resp.statusText), 'error');
+    }
   } catch (err) {
+    btn.disabled = false;
+    btn.textContent = '停止';
     showToast('停止失败: ' + err.message, 'error');
   }
 }
 
 function setRunning(running) {
   document.getElementById('btn-start').style.display = running ? 'none' : '';
-  document.getElementById('btn-stop').style.display = running ? '' : 'none';
+  const stopBtn = document.getElementById('btn-stop');
+  stopBtn.style.display = running ? '' : 'none';
+  stopBtn.disabled = false;
+  stopBtn.textContent = '停止';
   const badge = document.getElementById('globalStatus');
   badge.className = 'status-badge ' + (running ? 'running' : 'idle');
   badge.textContent = running ? '运行中' : '空闲';
@@ -852,6 +870,7 @@ function connectWS() {
       case 'report': showToast('报告已生成', 'success'); break;
       case 'status':
         if (msg.data.status === 'running') setRunning(true);
+        if (msg.data.status === 'completed' || msg.data.status === 'idle') setRunning(false);
         break;
     }
   };

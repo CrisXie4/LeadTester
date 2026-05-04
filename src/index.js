@@ -94,6 +94,9 @@ export class TestRunner extends EventEmitter {
   }
 
   stop() {
+    if (this.status === 'stopping') {
+      return { status: this.status, message: '测试正在停止中' };
+    }
     if (this.status !== 'running' || !this.mode) {
       throw new Error('没有正在运行的测试');
     }
