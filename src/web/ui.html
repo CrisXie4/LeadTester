@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LoadTester</title>
+  <style>
+    :root {
+      --bg: #0f1117; --surface: #161b22; --surface2: #1c2333;
+      --border: #30363d; --text: #e6edf3; --text2: #8b949e;
+      --blue: #58a6ff; --green: #3fb950; --red: #f85149;
+      --orange: #d29922; --purple: #bc8cff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    a { color: var(--blue); text-decoration: none; }
+
+    /* ===== Header ===== */
+    .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; height: 52px; }
+    .header .logo { font-size: 16px; font-weight: 600; color: var(--blue); margin-right: 32px; display: flex; align-items: center; gap: 8px; }
+    .header .logo svg { width: 20px; height: 20px; }
+    .nav { display: flex; gap: 4px; }
+    .nav-btn { background: none; border: none; color: var(--text2); padding: 8px 16px; font-size: 13px; cursor: pointer; border-radius: 6px; transition: all .15s; }
+    .nav-btn:hover { background: var(--surface2); color: var(--text); }
+    .nav-btn.active { background: var(--surface2); color: var(--blue); }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+    .credit-link { color: var(--text2); font-size: 12px; white-space: nowrap; transition: color .15s; }
+    .credit-link:hover { color: var(--blue); }
+    .status-badge { font-size: 12px; padding: 3px 10px; border-radius: 12px; font-weight: 500; }
+    .status-badge.idle { background: #30363d; color: var(--text2); }
+    .status-badge.running { background: #0d4429; color: var(--green); }
+    .status-badge.stopping { background: #4b2e00; color: var(--orange); }
+    .status-badge.completed { background: #1a2332; color: var(--blue); }
+
+    /* ===== Tabs ===== */
+    .tab-page { display: none; padding: 24px; max-width: 1200px; margin: 0 auto; }
+    .tab-page.active { display: block; }
+
+    /* ===== Cards ===== */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .card-title { font-size: 14px; font-weight: 600; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; letter-spacing: .5px; }
+
+    /* ===== Form ===== */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 12px; color: var(--text2); font-weight: 500; }
+    .form-group input, .form-group select, .form-group textarea {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 12px; border-radius: 6px; font-size: 13px; font-family: inherit;
+      transition: border-color .15s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none; border-color: var(--blue);
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-hint { font-size: 11px; color: var(--text2); }
+
+    /* ===== Buttons ===== */
+    .btn { padding: 8px 20px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 13px; cursor: pointer; font-weight: 500; transition: all .15s; }
+    .btn:hover { background: var(--border); }
+    .btn-primary { background: #238636; border-color: #2ea043; color: #fff; }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-danger { background: #b62324; border-color: #da3633; color: #fff; }
+    .btn-danger:hover { background: #da3633; }
+    .btn-group { display: flex; gap: 8px; margin-top: 16px; }
+
+    /* ===== Monitor ===== */
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; }
+    .metric-card .label { font-size: 11px; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+    .metric-card .value { font-size: 26px; font-weight: 700; color: var(--blue); }
+    .metric-card .value.green { color: var(--green); }
+    .metric-card .value.red { color: var(--red); }
+    .metric-card .value.orange { color: var(--orange); }
+    .metric-card .value.purple { color: var(--purple); }
+
+    /* ===== Chart ===== */
+    .chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .chart-title { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+    canvas { width: 100%; height: 200px; display: block; }
+
+    /* ===== Log ===== */
+    .log-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; height: 240px; overflow-y: auto; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; line-height: 1.8; }
+    .log-entry { display: flex; gap: 8px; }
+    .log-time { color: var(--text2); flex-shrink: 0; }
+    .log-msg { color: var(--text); }
+    .log-msg.error { color: var(--red); }
+    .log-msg.success { color: var(--green); }
+
+    /* ===== Status Codes ===== */
+    .codes-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .code-chip { background: var(--bg); border: 1px solid var(--border); padding: 4px 12px; border-radius: 6px; font-size: 12px; }
+    .code-chip .c2 { color: var(--green); }
+    .code-chip .c4 { color: var(--orange); }
+    .code-chip .c5 { color: var(--red); }
+
+    /* ===== Reports ===== */
+    .report-list { display: flex; flex-direction: column; gap: 8px; }
+    .report-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; transition: border-color .15s; }
+    .report-item:hover { border-color: var(--blue); }
+    .report-name { font-size: 13px; font-weight: 500; flex: 1; }
+    .report-meta { font-size: 11px; color: var(--text2); }
+    .report-actions { display: flex; gap: 6px; }
+    .report-actions .btn { padding: 4px 10px; font-size: 11px; }
+
+    /* ===== Empty state ===== */
+    .empty { text-align: center; padding: 48px 20px; color: var(--text2); }
+    .empty .icon { font-size: 40px; margin-bottom: 12px; opacity: .5; }
+    .empty .hint { font-size: 13px; }
+
+    /* ===== Mode selector ===== */
+    .mode-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+    .mode-tab { padding: 6px 16px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); color: var(--text2); cursor: pointer; font-size: 13px; transition: all .15s; }
+    .mode-tab.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+    .section-title { font-size: 13px; color: var(--text2); margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+
+    /* ===== Two columns for monitor ===== */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } }
+
+    /* ===== Toast ===== */
+    .toast { position: fixed; top: 16px; right: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px; font-size: 13px; z-index: 999; transform: translateX(120%); transition: transform .3s; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+    .toast.show { transform: translateX(0); }
+    .toast.error { border-color: var(--red); }
+    .toast.success { border-color: var(--green); }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    LoadTester
+  </div>
+  <div class="nav">
+    <button class="nav-btn active" onclick="switchTab('config')">配置</button>
+    <button class="nav-btn" onclick="switchTab('monitor')">监控</button>
+    <button class="nav-btn" onclick="switchTab('reports')">报告</button>
+  </div>
+  <div class="header-right">
+    <a class="credit-link" href="https://github.com/CrisXie4/LeadTester" target="_blank" rel="noopener noreferrer">Made By CrisXie</a>
+    <span class="status-badge idle" id="globalStatus">空闲</span>
+  </div>
+</div>
+
+<!-- Tab: Config -->
+<div class="tab-page active" id="page-config">
+  <div class="card">
+    <div class="card-title">测压模式</div>
+    <div class="mode-tabs">
+      <div class="mode-tab active" onclick="switchMode('ai')">AI 接口 (RPM)</div>
+      <div class="mode-tab" onclick="switchMode('http')">HTTP 接口 (QPS)</div>
+      <div class="mode-tab" onclick="switchMode('simple')">纯 HTTP 压测</div>
+    </div>
+
+    <!-- AI Config -->
+    <div id="config-ai">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>API 地址</label>
+          <input id="ai-api-base" value="https://api.openai.com/v1/chat/completions">
+        </div>
+        <div class="form-group">
+          <label>模型</label>
+          <input id="ai-model" value="gpt-3.5-turbo">
+        </div>
+        <div class="form-group full">
+          <label>API Keys (每行一个)</label>
+          <textarea id="ai-keys" placeholder="sk-xxx&#10;sk-yyy" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Key 轮询策略</label>
+          <select id="ai-key-rotation">
+            <option value="round_robin">轮询 (Round Robin)</option>
+            <option value="weighted">权重分配</option>
+            <option value="random">随机</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>目标 RPM</label>
+          <input id="ai-rpm" type="number" value="100">
+        </div>
+        <div class="form-group">
+          <label>最大时长 (秒)</label>
+          <input id="ai-duration" type="number" value="300">
+        </div>
+        <div class="form-group">
+          <label>最大 Worker 数</label>
+          <input id="ai-workers" type="number" value="500">
+        </div>
+        <div class="form-group">
+          <label>输入策略</label>
+          <select id="ai-input-strategy">
+            <option value="random_text">随机文本</option>
+            <option value="user_defined">自定义 Prompt</option>
+            <option value="template">模板库</option>
+            <option value="dynamic_length">动态长度</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>模板类型</label>
+          <select id="ai-template">
+            <option value="short">短文本</option>
+            <option value="code">代码</option>
+            <option value="long">长文本</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>流式输出</label>
+          <select id="ai-stream">
+            <option value="false">否</option>
+            <option value="true">是 (采集 TTFT)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>连接超时 (秒)</label>
+          <input id="ai-timeout-conn" type="number" value="10">
+        </div>
+        <div class="form-group">
+          <label>读取超时 (秒)</label>
+          <input id="ai-timeout-read" type="number" value="60">
+        </div>
+        <div class="form-group">
+          <label>总超时 (秒)</label>
+          <input id="ai-timeout-total" type="number" value="120">
+        </div>
+      </div>
+    </div>
+
+    <!-- HTTP Config -->
+    <div id="config-http" style="display:none">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>目标 URL</label>
+          <input id="http-url" value="https://api.example.com/v1/data">
+        </div>
+        <div class="form-group">
+          <label>请求方法</label>
+          <select id="http-method">
+            <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>请求头 (JSON)</label>
+          <textarea id="http-headers" rows="2">{"Content-Type": "application/json"}</textarea>
+        </div>
+        <div class="form-group full">
+          <label>请求体</label>
+          <textarea id="http-body" rows="3" placeholder='{"key": "value"}'></textarea>
+        </div>
+        <div class="form-group">
+          <label>加压类型</label>
+          <select id="http-load-type" onchange="toggleStepConfig()">
+            <option value="fixed_qps">固定 QPS</option>
+            <option value="fixed_concurrency">固定并发</option>
+            <option value="step">阶梯加压</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>目标 QPS</label>
+          <input id="http-qps" type="number" value="100">
+        </div>
+        <div class="form-group">
+          <label>并发数</label>
+          <input id="http-concurrency" type="number" value="50">
+        </div>
+        <div class="form-group">
+          <label>最大 Worker 数</label>
+          <input id="http-workers" type="number" value="500">
+        </div>
+        <div class="form-group">
+          <label>最大时长 (秒)</label>
+          <input id="http-duration" type="number" value="60">
+        </div>
+        <div class="form-group">
+          <label>读取超时 (秒)</label>
+          <input id="http-timeout-read" type="number" value="30">
+        </div>
+      </div>
+
+      <!-- Step config -->
+      <div id="step-config" style="display:none">
+        <div class="section-title">阶梯加压参数</div>
+        <div class="form-grid">
+          <div class="form-group"><label>起始 QPS</label><input id="step-start" type="number" value="100"></div>
+          <div class="form-group"><label>步长</label><input id="step-size" type="number" value="100"></div>
+          <div class="form-group"><label>每阶段时长 (秒)</label><input id="step-duration" type="number" value="60"></div>
+          <div class="form-group"><label>最大 QPS</label><input id="step-max" type="number" value="1000"></div>
+        </div>
+      </div>
+
+      <div class="section-title">断言规则</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>期望状态码</label>
+          <input id="http-assert-status" type="number" value="200">
+        </div>
+      </div>
+    </div>
+
+    <!-- Simple Config -->
+    <div id="config-simple" style="display:none">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>目标 URL</label>
+          <input id="simple-url" value="https://example.com" placeholder="https://your-site.com/api">
+        </div>
+        <div class="form-group">
+          <label>请求方法</label>
+          <select id="simple-method">
+            <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>请求头 (JSON，可选)</label>
+          <textarea id="simple-headers" rows="2">{"Content-Type": "application/json"}</textarea>
+        </div>
+        <div class="form-group full">
+          <label>请求体 (POST/PUT 时可选)</label>
+          <textarea id="simple-body" rows="2" placeholder='留空则无 body'></textarea>
+        </div>
+        <div class="form-group">
+          <label>目标 RPM (每分钟请求数)</label>
+          <input id="simple-rpm" type="number" value="100">
+        </div>
+        <div class="form-group">
+          <label>持续时长 (秒)</label>
+          <input id="simple-duration" type="number" value="60">
+        </div>
+        <div class="form-group">
+          <label>最大并发数</label>
+          <input id="simple-workers" type="number" value="1000">
+        </div>
+        <div class="form-group">
+          <label>单次超时 (秒)</label>
+          <input id="simple-timeout" type="number" value="30">
+        </div>
+        <div class="form-group">
+          <label>遇到非200时</label>
+          <select id="simple-allow-non200">
+            <option value="true">继续压测 (只统计)</option>
+            <option value="false">停止</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" id="btn-start" onclick="startTest()">启动测压</button>
+      <button class="btn btn-danger" id="btn-stop" onclick="stopTest()" style="display:none">停止</button>
+      <button class="btn" onclick="copyShareLink()">分享压测链接</button>
+    </div>
+    <p class="form-hint" style="margin-top:10px">分享链接会把当前表单参数写入 URL，不需要后端或数据库；请勿在链接里分享真实 API Key。</p>
+  </div>
+</div>
+
+<!-- Tab: Monitor -->
+<div class="tab-page" id="page-monitor">
+  <div class="metrics-grid">
+    <div class="metric-card"><div class="label">RPS</div><div class="value" id="m-rps">-</div></div>
+    <div class="metric-card"><div class="label">RPM</div><div class="value" id="m-rpm">-</div></div>
+    <div class="metric-card"><div class="label">总请求数</div><div class="value" id="m-total">-</div></div>
+    <div class="metric-card"><div class="label">成功</div><div class="value green" id="m-success">-</div></div>
+    <div class="metric-card"><div class="label">失败</div><div class="value red" id="m-failure">-</div></div>
+    <div class="metric-card"><div class="label">错误率</div><div class="value red" id="m-error-rate">-</div></div>
+    <div class="metric-card"><div class="label">运行时间</div><div class="value purple" id="m-elapsed">-</div></div>
+  </div>
+
+  <div class="metrics-grid">
+    <div class="metric-card"><div class="label">平均延迟</div><div class="value" id="m-avg">-</div></div>
+    <div class="metric-card"><div class="label">P50</div><div class="value" id="m-p50">-</div></div>
+    <div class="metric-card"><div class="label">P90</div><div class="value orange" id="m-p90">-</div></div>
+    <div class="metric-card"><div class="label">P95</div><div class="value orange" id="m-p95">-</div></div>
+    <div class="metric-card"><div class="label">P99</div><div class="value red" id="m-p99">-</div></div>
+  </div>
+
+  <div class="two-col">
+    <div class="chart-container">
+      <div class="chart-title">RPS 实时曲线</div>
+      <canvas id="chart-rps"></canvas>
+    </div>
+    <div class="chart-container">
+      <div class="chart-title">延迟趋势 (ms)</div>
+      <canvas id="chart-latency"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">状态码分布</div>
+    <div class="codes-row" id="m-codes"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">错误详情 <span id="error-count-badge" style="font-size:11px;color:var(--red);font-weight:400"></span></div>
+    <div id="error-table-wrap" style="max-height:400px;overflow-y:auto">
+      <div class="empty" id="error-empty"><div class="icon">✅</div><div class="hint">暂无错误</div></div>
+      <table id="error-table" style="width:100%;border-collapse:collapse;display:none;font-size:12px">
+        <thead>
+          <tr style="text-align:left;border-bottom:1px solid var(--border)">
+            <th style="padding:6px 8px;color:var(--text2)">时间</th>
+            <th style="padding:6px 8px;color:var(--text2)">状态码</th>
+            <th style="padding:6px 8px;color:var(--text2)">错误类型</th>
+            <th style="padding:6px 8px;color:var(--text2)">延迟</th>
+            <th style="padding:6px 8px;color:var(--text2)">响应内容</th>
+          </tr>
+        </thead>
+        <tbody id="error-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">实时日志</div>
+    <div class="log-box" id="m-log"></div>
+  </div>
+</div>
+
+<!-- Tab: Reports -->
+<div class="tab-page" id="page-reports">
+  <div class="card">
+    <div class="card-title">历史报告</div>
+    <div id="report-list" class="report-list">
+      <div class="empty"><div class="icon">📂</div><div class="hint">暂无报告</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== State =====
+let currentMode = 'ai';
+let ws = null;
+let backendAvailable = false;
+let rpsHistory = [];
+let latencyHistory = [];
+const MAX_HISTORY = 120;
+let logOffset = 0;
+const SHARE_PARAM = 'c';
+
+// ===== Navigation =====
+function switchTab(name) {
+  document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-btn')[
+    name === 'config' ? 0 : name === 'monitor' ? 1 : 2
+  ].classList.add('active');
+
+  if (name === 'reports') loadReports();
+}
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.mode-tab')[mode === 'ai' ? 0 : mode === 'http' ? 1 : 2].classList.add('active');
+  document.getElementById('config-ai').style.display = mode === 'ai' ? '' : 'none';
+  document.getElementById('config-http').style.display = mode === 'http' ? '' : 'none';
+  document.getElementById('config-simple').style.display = mode === 'simple' ? '' : 'none';
+}
+
+function encodeShareConfig(config) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(config))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function decodeShareConfig(str) {
+  const normalized = str.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+  return JSON.parse(decodeURIComponent(escape(atob(padded))));
+}
+
+async function copyShareLink() {
+  const url = new URL(location.href);
+  const shareConfig = JSON.parse(JSON.stringify(buildConfig()));
+  if (shareConfig.ai_config) shareConfig.ai_config.api_keys = [];
+  url.searchParams.set(SHARE_PARAM, encodeShareConfig(shareConfig));
+  url.hash = '';
+  const shareUrl = url.toString();
+
+  try {
+    await navigator.clipboard.writeText(shareUrl);
+    showToast('分享链接已复制', 'success');
+  } catch {
+    window.prompt('复制这个分享链接', shareUrl);
+  }
+}
+
+function loadSharedConfigFromUrl() {
+  const raw = new URLSearchParams(location.search).get(SHARE_PARAM);
+  if (!raw) return false;
+
+  try {
+    applyConfigToForm(decodeShareConfig(raw));
+    showToast('已加载分享链接中的配置', 'success');
+    return true;
+  } catch (err) {
+    showToast('分享链接解析失败: ' + err.message, 'error');
+    return false;
+  }
+}
+
+function toggleStepConfig() {
+  const v = document.getElementById('http-load-type').value;
+  document.getElementById('step-config').style.display = v === 'step' ? '' : 'none';
+  document.getElementById('http-qps').closest('.form-group').style.display = v === 'fixed_concurrency' ? 'none' : '';
+  document.getElementById('http-concurrency').closest('.form-group').style.display = v === 'fixed_qps' || v === 'step' ? 'none' : '';
+}
+
+// ===== Build Config =====
+function buildConfig() {
+  if (currentMode === 'simple') return buildSimpleConfig();
+  if (currentMode === 'ai') {
+    return {
+      mode: 'ai',
+      ai_config: {
+        api_base: document.getElementById('ai-api-base').value,
+        model: document.getElementById('ai-model').value,
+        api_keys: document.getElementById('ai-keys').value.split('\n').map(s => s.trim()).filter(Boolean),
+        key_rotation: document.getElementById('ai-key-rotation').value,
+        target_rpm: Number(document.getElementById('ai-rpm').value),
+        max_duration: Number(document.getElementById('ai-duration').value),
+        input_strategy: document.getElementById('ai-input-strategy').value,
+        prompt_template: document.getElementById('ai-template').value,
+        stream: document.getElementById('ai-stream').value === 'true',
+        timeout: {
+          connection: Number(document.getElementById('ai-timeout-conn').value),
+          read: Number(document.getElementById('ai-timeout-read').value),
+          total: Number(document.getElementById('ai-timeout-total').value),
+        },
+      },
+      general: {
+        max_workers: Number(document.getElementById('ai-workers').value),
+        report_dir: './reports',
+        save_raw_data: true,
+      },
+    };
+  } else {
+    let headers = {};
+    try { headers = JSON.parse(document.getElementById('http-headers').value); } catch {}
+    const loadType = document.getElementById('http-load-type').value;
+    return {
+      mode: 'http',
+      http_config: {
+        target_url: document.getElementById('http-url').value,
+        method: document.getElementById('http-method').value,
+        headers,
+        body: document.getElementById('http-body').value || null,
+        load_type: loadType,
+        target_qps: Number(document.getElementById('http-qps').value),
+        concurrency: Number(document.getElementById('http-concurrency').value),
+        step_config: {
+          start_qps: Number(document.getElementById('step-start').value),
+          step_size: Number(document.getElementById('step-size').value),
+          step_duration: Number(document.getElementById('step-duration').value),
+          max_qps: Number(document.getElementById('step-max').value),
+        },
+        assertions: [{ type: 'status_code', expected: Number(document.getElementById('http-assert-status').value) }],
+        timeout: {
+          connection: 10,
+          read: Number(document.getElementById('http-timeout-read').value),
+          total: Number(document.getElementById('http-duration').value),
+        },
+      },
+      general: {
+        max_workers: Number(document.getElementById('http-workers').value),
+        report_dir: './reports',
+        save_raw_data: true,
+      },
+    };
+  }
+}
+
+function buildSimpleConfig() {
+  let headers = {};
+  try { headers = JSON.parse(document.getElementById('simple-headers').value); } catch {}
+
+  return {
+    mode: 'simple',
+    simple_config: {
+      url: document.getElementById('simple-url').value,
+      method: document.getElementById('simple-method').value,
+      headers,
+      body: document.getElementById('simple-body').value || undefined,
+      target_rpm: Number(document.getElementById('simple-rpm').value),
+      max_duration: Number(document.getElementById('simple-duration').value),
+      max_workers: Number(document.getElementById('simple-workers').value),
+      timeout: Number(document.getElementById('simple-timeout').value),
+      stop_on_error: document.getElementById('simple-allow-non200').value === 'false',
+    },
+    general: {
+      max_workers: Number(document.getElementById('simple-workers').value),
+      report_dir: './reports',
+      save_raw_data: true,
+    },
+  };
+}
+
+// ===== API Calls =====
+async function startTest() {
+  const config = buildConfig();
+  const btn = document.getElementById('btn-start');
+  btn.disabled = true; btn.textContent = '启动中...';
+
+  if (!backendAvailable) {
+    btn.disabled = false; btn.textContent = '启动测压';
+    showToast('当前是静态部署，只能分享/编辑配置；真正发压需要本地后端或 CLI', 'error');
+    appendLog({ time: new Date().toLocaleTimeString('zh-CN'), message: '静态模式：已生成配置，可点击“分享压测链接”发给别人。' });
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) });
+    const data = await resp.json();
+    if (data.ok) {
+      showToast('测压已启动', 'success');
+      setRunning(true);
+      switchTab('monitor');
+      resetCharts();
+    } else {
+      showToast(data.error || '启动失败', 'error');
+    }
+  } catch (err) {
+    showToast('网络错误: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '启动测压';
+  }
+}
+
+async function stopTest() {
+  try {
+    await fetch('/api/stop', { method: 'POST' });
+    showToast('正在停止...', 'success');
+  } catch (err) {
+    showToast('停止失败: ' + err.message, 'error');
+  }
+}
+
+function setRunning(running) {
+  document.getElementById('btn-start').style.display = running ? 'none' : '';
+  document.getElementById('btn-stop').style.display = running ? '' : 'none';
+  const badge = document.getElementById('globalStatus');
+  badge.className = 'status-badge ' + (running ? 'running' : 'idle');
+  badge.textContent = running ? '运行中' : '空闲';
+}
+
+// ===== Reports =====
+async function loadReports() {
+  const list = document.getElementById('report-list');
+  if (!backendAvailable) {
+    list.innerHTML = '<div class="empty"><div class="icon">📂</div><div class="hint">静态部署不保存历史报告</div></div>';
+    return;
+  }
+  try {
+    const resp = await fetch('/api/reports');
+    const data = await resp.json();
+    if (!data.reports || data.reports.length === 0) {
+      list.innerHTML = '<div class="empty"><div class="icon">📂</div><div class="hint">暂无报告，完成一次测压后自动生成</div></div>';
+      return;
+    }
+    list.innerHTML = data.reports.map(r => `
+      <div class="report-item">
+        <span class="report-name">${escHtml(r.name)}</span>
+        <span class="report-meta">${new Date(r.time).toLocaleString('zh-CN')} &middot; ${fmtSize(r.size)}</span>
+        <div class="report-actions">
+          ${r.name.endsWith('.html') ? `<a class="btn" href="/api/reports/${r.name}" target="_blank">查看</a>` : ''}
+          <a class="btn" href="/api/reports/${r.name}" download>下载</a>
+        </div>
+      </div>
+    `).join('');
+  } catch {}
+}
+
+// ===== Settings =====
+async function loadSettings() {
+  if (!backendAvailable) {
+    document.getElementById('settings-yaml').value = '# 静态部署无法读取 config/config.yaml\n# 请在配置页编辑参数，并使用“分享压测链接”同步给别人。';
+    return;
+  }
+  try {
+    const resp = await fetch('/api/config/default');
+    const data = await resp.json();
+    document.getElementById('settings-yaml').value = data.yaml || '# 配置文件为空，请在此编辑';
+  } catch (err) {
+    showToast('加载配置失败: ' + err.message, 'error');
+  }
+}
+
+async function saveSettings() {
+  const yamlStr = document.getElementById('settings-yaml').value;
+  if (!backendAvailable) {
+    showToast('静态部署无法保存到服务器，请使用分享链接', 'error');
+    return;
+  }
+  try {
+    const resp = await fetch('/api/config/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yaml: yamlStr }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      showToast('配置已保存', 'success');
+    } else {
+      showToast('保存失败: ' + data.error, 'error');
+    }
+  } catch (err) {
+    showToast('保存失败: ' + err.message, 'error');
+  }
+}
+
+async function loadConfigToForm() {
+  if (!backendAvailable) {
+    showToast('静态部署无法读取配置文件，请使用分享链接', 'error');
+    return;
+  }
+  try {
+    const resp = await fetch('/api/config/parsed');
+    const data = await resp.json();
+    if (!data.config) { showToast('配置文件为空', 'error'); return; }
+    const c = data.config;
+
+    // Mode
+    if (c.mode) switchMode(c.mode);
+
+    // AI config
+    const ai = c.ai_config || {};
+    if (ai.api_base) document.getElementById('ai-api-base').value = ai.api_base;
+    if (ai.model) document.getElementById('ai-model').value = ai.model;
+    if (ai.api_keys) document.getElementById('ai-keys').value = ai.api_keys.join('\n');
+    if (ai.key_rotation) document.getElementById('ai-key-rotation').value = ai.key_rotation;
+    if (ai.target_rpm) document.getElementById('ai-rpm').value = ai.target_rpm;
+    if (ai.max_duration) document.getElementById('ai-duration').value = ai.max_duration;
+    if (ai.input_strategy) document.getElementById('ai-input-strategy').value = ai.input_strategy;
+    if (ai.prompt_template) document.getElementById('ai-template').value = ai.prompt_template;
+    if (ai.stream !== undefined) document.getElementById('ai-stream').value = String(ai.stream);
+    if (ai.timeout) {
+      if (ai.timeout.connection) document.getElementById('ai-timeout-conn').value = ai.timeout.connection;
+      if (ai.timeout.read) document.getElementById('ai-timeout-read').value = ai.timeout.read;
+      if (ai.timeout.total) document.getElementById('ai-timeout-total').value = ai.timeout.total;
+    }
+
+    // HTTP config
+    const h = c.http_config || {};
+    if (h.target_url) document.getElementById('http-url').value = h.target_url;
+    if (h.method) document.getElementById('http-method').value = h.method;
+    if (h.headers) document.getElementById('http-headers').value = JSON.stringify(h.headers, null, 2);
+    if (h.body) document.getElementById('http-body').value = h.body;
+    if (h.load_type) { document.getElementById('http-load-type').value = h.load_type; toggleStepConfig(); }
+    if (h.target_qps) document.getElementById('http-qps').value = h.target_qps;
+    if (h.concurrency) document.getElementById('http-concurrency').value = h.concurrency;
+    if (h.timeout) {
+      if (h.timeout.read) document.getElementById('http-timeout-read').value = h.timeout.read;
+      if (h.timeout.total) document.getElementById('http-duration').value = h.timeout.total;
+    }
+    if (h.step_config) {
+      if (h.step_config.start_qps) document.getElementById('step-start').value = h.step_config.start_qps;
+      if (h.step_config.step_size) document.getElementById('step-size').value = h.step_config.step_size;
+      if (h.step_config.step_duration) document.getElementById('step-duration').value = h.step_config.step_duration;
+      if (h.step_config.max_qps) document.getElementById('step-max').value = h.step_config.max_qps;
+    }
+    if (h.assertions && h.assertions[0]) {
+      if (h.assertions[0].expected) document.getElementById('http-assert-status').value = h.assertions[0].expected;
+    }
+
+    // General
+    const g = c.general || {};
+    if (g.max_workers) {
+      document.getElementById('ai-workers').value = g.max_workers;
+      document.getElementById('http-workers').value = g.max_workers;
+    }
+
+    // Simple config
+    const s = c.simple_config || {};
+    if (s.url) document.getElementById('simple-url').value = s.url;
+    if (s.method) document.getElementById('simple-method').value = s.method;
+    if (s.headers) document.getElementById('simple-headers').value = JSON.stringify(s.headers, null, 2);
+    if (s.body) document.getElementById('simple-body').value = s.body;
+    if (s.target_rpm) document.getElementById('simple-rpm').value = s.target_rpm;
+    if (s.max_duration) document.getElementById('simple-duration').value = s.max_duration;
+    if (s.max_workers) document.getElementById('simple-workers').value = s.max_workers;
+    if (s.stop_on_error !== undefined) document.getElementById('simple-allow-non200').value = String(!s.stop_on_error);
+    if (s.timeout) document.getElementById('simple-timeout').value = s.timeout;
+
+    showToast('已从配置文件加载', 'success');
+  } catch (err) {
+    showToast('加载失败: ' + err.message, 'error');
+  }
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function applyConfigToForm(c) {
+  if (!c || typeof c !== 'object') return;
+  const set = (id, value) => {
+    if (value !== undefined && value !== null && document.getElementById(id)) {
+      document.getElementById(id).value = value;
+    }
+  };
+  const setJson = (id, value) => {
+    if (value !== undefined && value !== null) set(id, JSON.stringify(value, null, 2));
+  };
+
+  if (c.mode) switchMode(c.mode);
+
+  const ai = c.ai_config || {};
+  set('ai-api-base', ai.api_base);
+  set('ai-model', ai.model);
+  if (Array.isArray(ai.api_keys)) set('ai-keys', ai.api_keys.join('\n'));
+  set('ai-key-rotation', ai.key_rotation);
+  set('ai-rpm', ai.target_rpm);
+  set('ai-duration', ai.max_duration);
+  set('ai-input-strategy', ai.input_strategy);
+  set('ai-template', ai.prompt_template);
+  if (ai.stream !== undefined) set('ai-stream', String(ai.stream));
+  if (ai.timeout) {
+    set('ai-timeout-conn', ai.timeout.connection);
+    set('ai-timeout-read', ai.timeout.read);
+    set('ai-timeout-total', ai.timeout.total);
+  }
+
+  const h = c.http_config || {};
+  set('http-url', h.target_url);
+  set('http-method', h.method);
+  setJson('http-headers', h.headers);
+  set('http-body', h.body);
+  if (h.load_type) { set('http-load-type', h.load_type); toggleStepConfig(); }
+  set('http-qps', h.target_qps);
+  set('http-concurrency', h.concurrency);
+  if (h.timeout) {
+    set('http-timeout-read', h.timeout.read);
+    set('http-duration', h.timeout.total);
+  }
+  if (h.step_config) {
+    set('step-start', h.step_config.start_qps);
+    set('step-size', h.step_config.step_size);
+    set('step-duration', h.step_config.step_duration);
+    set('step-max', h.step_config.max_qps);
+  }
+  if (h.assertions && h.assertions[0]) set('http-assert-status', h.assertions[0].expected);
+
+  const g = c.general || {};
+  set('ai-workers', g.max_workers);
+  set('http-workers', g.max_workers);
+
+  const s = c.simple_config || {};
+  set('simple-url', s.url);
+  set('simple-method', s.method);
+  setJson('simple-headers', s.headers);
+  set('simple-body', s.body);
+  set('simple-rpm', s.target_rpm);
+  set('simple-duration', s.max_duration);
+  set('simple-workers', s.max_workers);
+  if (s.stop_on_error !== undefined) set('simple-allow-non200', String(!s.stop_on_error));
+  set('simple-timeout', s.timeout);
+}
+
+// ===== WebSocket =====
+function connectWS() {
+  if (!backendAvailable) return;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    switch (msg.type) {
+      case 'snapshot': updateMonitor(msg.data); break;
+      case 'log': appendLog(msg.data); break;
+      case 'completed': onComplete(msg.data); break;
+      case 'report': showToast('报告已生成', 'success'); break;
+      case 'status':
+        if (msg.data.status === 'running') setRunning(true);
+        break;
+    }
+  };
+
+  ws.onclose = () => {
+    if (backendAvailable) setTimeout(connectWS, 2000);
+  };
+}
+
+function updateMonitor(d) {
+  setText('m-rps', d.currentRps);
+  setText('m-rpm', d.currentRpm);
+  setText('m-total', d.totalRequests);
+  setText('m-success', d.successCount);
+  setText('m-failure', d.failureCount);
+  setText('m-error-rate', d.errorRate + '%');
+  setText('m-avg', d.avgLatencyMs + 'ms');
+  setText('m-p50', d.p50Ms + 'ms');
+  setText('m-p90', d.p90Ms + 'ms');
+  setText('m-p95', d.p95Ms + 'ms');
+  setText('m-p99', d.p99Ms + 'ms');
+
+  const sec = Math.floor(d.elapsedSec);
+  setText('m-elapsed', Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'));
+
+  // Status codes
+  const codesDiv = document.getElementById('m-codes');
+  codesDiv.innerHTML = '';
+  for (const [code, count] of Object.entries(d.statusCodes || {})) {
+    const cls = code.startsWith('2') ? 'c2' : code.startsWith('4') || code.startsWith('5') ? 'c4' : 'c5';
+    codesDiv.innerHTML += `<span class="code-chip"><span class="${cls}">${code}</span>: ${count}</span>`;
+  }
+
+  // Error details table
+  const errors = d.recentErrors || [];
+  const tbody = document.getElementById('error-tbody');
+  const table = document.getElementById('error-table');
+  const empty = document.getElementById('error-empty');
+  const badge = document.getElementById('error-count-badge');
+
+  if (errors.length > 0) {
+    table.style.display = '';
+    empty.style.display = 'none';
+    badge.textContent = `(${errors.length} 条)`;
+    // 最新的在前
+    tbody.innerHTML = errors.slice().reverse().map(e => {
+      const bodyPreview = e.errorBody
+        ? `<div style="max-width:400px;max-height:80px;overflow:auto;white-space:pre-wrap;word-break:break-all;background:var(--bg);padding:4px 6px;border-radius:4px;font-family:monospace;font-size:11px;color:var(--red);cursor:pointer" onclick="this.style.maxHeight=this.style.maxHeight==='none'?'80px':'none'" title="点击展开/折叠">${escHtml(e.errorBody)}</div>`
+        : '-';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 8px;color:var(--text2);white-space:nowrap">${e.time}</td>
+        <td style="padding:6px 8px"><span style="color:${e.statusCode >= 400 ? 'var(--red)' : 'var(--orange)'}">${e.statusCode || '-'}</span></td>
+        <td style="padding:6px 8px;color:var(--orange)">${escHtml(e.errorType || '-')}</td>
+        <td style="padding:6px 8px">${e.latencyMs}ms</td>
+        <td style="padding:6px 8px">${bodyPreview}</td>
+      </tr>`;
+    }).join('');
+  } else {
+    table.style.display = 'none';
+    empty.style.display = '';
+    badge.textContent = '';
+  }
+
+  // Charts
+  rpsHistory.push(d.currentRps);
+  latencyHistory.push(d.avgLatencyMs);
+  if (rpsHistory.length > MAX_HISTORY) { rpsHistory.shift(); latencyHistory.shift(); }
+  drawChart('chart-rps', rpsHistory, '#58a6ff');
+  drawChart('chart-latency', latencyHistory, '#d29922');
+
+  // Auto log
+  appendLog({ time: new Date().toLocaleTimeString('zh-CN'), message: `RPS: ${d.currentRps} | 延迟: ${d.avgLatencyMs}ms | 错误: ${d.errorRate}%` });
+}
+
+function appendLog(entry) {
+  const box = document.getElementById('m-log');
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  const isError = (entry.message || '').includes('错误') || (entry.message || '').includes('ERR');
+  const isSuccess = (entry.message || '').includes('完成') || (entry.message || '').includes('OK');
+  div.innerHTML = `<span class="log-time">${entry.time}</span><span class="log-msg ${isError ? 'error' : isSuccess ? 'success' : ''}">${escHtml(entry.message)}</span>`;
+  box.appendChild(div);
+  if (box.children.length > 500) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+function onComplete(snap) {
+  setRunning(false);
+  showToast('测压完成', 'success');
+  appendLog({ time: new Date().toLocaleTimeString('zh-CN'), message: `完成! 总请求: ${snap.totalRequests}, 成功率: ${((snap.successCount / snap.totalRequests) * 100).toFixed(1)}%` });
+}
+
+function resetCharts() {
+  rpsHistory = [];
+  latencyHistory = [];
+  logOffset = 0;
+  document.getElementById('m-log').innerHTML = '';
+  document.getElementById('error-tbody').innerHTML = '';
+  document.getElementById('error-table').style.display = 'none';
+  document.getElementById('error-empty').style.display = '';
+  document.getElementById('error-count-badge').textContent = '';
+}
+
+// ===== Canvas Chart =====
+function drawChart(canvasId, data, color) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+
+  ctx.clearRect(0, 0, W, H);
+  if (data.length < 2) return;
+
+  const max = Math.max(...data, 1);
+  const min = 0;
+  const padding = { top: 10, right: 10, bottom: 20, left: 50 };
+  const chartW = W - padding.left - padding.right;
+  const chartH = H - padding.top - padding.bottom;
+
+  // Grid
+  ctx.strokeStyle = '#30363d';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartH / 4) * i;
+    ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(W - padding.right, y); ctx.stroke();
+  }
+
+  // Y labels
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartH / 4) * i;
+    const val = max - (max / 4) * i;
+    ctx.fillText(Math.round(val), padding.left - 6, y + 3);
+  }
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < data.length; i++) {
+    const x = padding.left + (chartW / (data.length - 1)) * i;
+    const y = padding.top + chartH - (data[i] / max) * chartH;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Fill
+  const lastX = padding.left + chartW;
+  const lastY = padding.top + chartH - (data[data.length - 1] / max) * chartH;
+  ctx.lineTo(lastX, padding.top + chartH);
+  ctx.lineTo(padding.left, padding.top + chartH);
+  ctx.closePath();
+  ctx.fillStyle = color + '1a';
+  ctx.fill();
+}
+
+// ===== Utils =====
+function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
+  setTimeout(() => el.className = 'toast', 3000);
+}
+
+// ===== Init =====
+async function init() {
+  loadSharedConfigFromUrl();
+
+  // Check current status
+  try {
+    const resp = await fetch('/api/status');
+    const data = await resp.json();
+    backendAvailable = true;
+    connectWS();
+    if (data.status === 'running') setRunning(true);
+  } catch {
+    backendAvailable = false;
+    appendLog({ time: new Date().toLocaleTimeString('zh-CN'), message: '静态模式：后端不可用，支持配置分享，不支持服务器发压和报告保存。' });
+  }
+
+}
+
+init();
+</script>
+</body>
+</html>

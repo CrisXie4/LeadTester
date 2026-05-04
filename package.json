@@ -1,0 +1,24 @@
+{
+  "name": "loadtester",
+  "version": "1.0.0",
+  "description": "API 并发测压工具 — 支持 AI 接口 RPM 控制与通用 HTTP QPS/TPS 控制",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "loadtester": "src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "ai": "node src/cli.js --mode ai",
+    "http": "node src/cli.js --mode http",
+    "dashboard": "node src/cli.js --dashboard"
+  },
+  "keywords": ["load-test", "stress-test", "api", "benchmark", "rpm", "qps"],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.0.0",
+    "js-yaml": "^4.1.0",
+    "ws": "^8.16.0",
+    "uuid": "^9.0.0"
+  }
+}
