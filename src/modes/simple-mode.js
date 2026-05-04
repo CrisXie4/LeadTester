@@ -50,7 +50,7 @@ export class SimpleMode {
     }
 
     try {
-      await pool.run(() => this._hit(), limiter);
+      await pool.run((workerId) => this._hit(workerId), limiter);
     } finally {
       if (this._snapshotTimer) clearInterval(this._snapshotTimer);
     }
@@ -63,7 +63,7 @@ export class SimpleMode {
     this._log('[压测] 停止中...');
   }
 
-  async _hit() {
+  async _hit(workerId = 0) {
     const { config } = this;
     const start = Date.now();
     let statusCode = 0;
@@ -128,6 +128,19 @@ export class SimpleMode {
       if (this._recentErrors.length > this._maxRecentErrors) this._recentErrors.shift();
     }
 
+    this._log(formatRequestLog({
+      elapsedMs: Date.now() - this._startTime,
+      index: this._counters.total,
+      workerId,
+      method: config.method || 'GET',
+      url: config.url,
+      statusCode,
+      isSuccess: ok,
+      latencyMs,
+      errorType,
+      errorBody,
+    }));
+
     if (!ok && config.stop_on_error) {
       throw new Error(`HTTP ${statusCode}`);
     }
@@ -163,4 +176,24 @@ export class SimpleMode {
   get metrics() {
     return { records: [] };
   }
+}
+
+function formatRequestLog({ elapsedMs, index, workerId, method, url, statusCode, isSuccess, latencyMs, errorType, errorBody }) {
+  const status = statusCode || 'ERR';
+  const result = isSuccess ? 'OK' : `FAIL ${errorType || ''}`.trim();
+  const detail = errorBody ? ` | ${truncateOneLine(errorBody, 180)}` : '';
+  return `[${formatElapsed(elapsedMs)}] #${index} worker-${workerId} ${method || 'GET'} ${url} -> ${status} ${latencyMs}ms ${result}${detail}`;
+}
+
+function formatElapsed(ms) {
+  const safe = Math.max(0, Number(ms) || 0);
+  const minutes = Math.floor(safe / 60000);
+  const seconds = Math.floor((safe % 60000) / 1000);
+  const millis = Math.floor(safe % 1000);
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+}
+
+function truncateOneLine(value, maxLen) {
+  const text = String(value).replace(/\s+/g, ' ').trim();
+  return text.length > maxLen ? text.slice(0, maxLen - 3) + '...' : text;
 }

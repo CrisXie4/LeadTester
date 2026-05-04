@@ -235,7 +235,7 @@ export class HTTPMode {
 
     const latencyMs = Date.now() - start;
 
-    this.metrics.record({
+    const record = this.metrics.record({
       mode: 'http',
       latencyMs,
       statusCode,
@@ -246,6 +246,19 @@ export class HTTPMode {
       workerId,
       retryCount: 0,
     });
+
+    this._log(formatRequestLog({
+      elapsedMs: record.timestamp - this.metrics.startTime,
+      index: this.metrics.counters.total,
+      workerId,
+      method: config.method,
+      url,
+      statusCode,
+      isSuccess,
+      latencyMs,
+      errorType,
+      errorBody,
+    }));
 
     return { statusCode, isSuccess, latencyMs };
   }
@@ -346,4 +359,24 @@ class RampRateLimiter {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function formatRequestLog({ elapsedMs, index, workerId, method, url, statusCode, isSuccess, latencyMs, errorType, errorBody }) {
+  const status = statusCode || 'ERR';
+  const result = isSuccess ? 'OK' : `FAIL ${errorType || ''}`.trim();
+  const detail = errorBody ? ` | ${truncateOneLine(errorBody, 180)}` : '';
+  return `[${formatElapsed(elapsedMs)}] #${index} worker-${workerId} ${method || 'GET'} ${url} -> ${status} ${latencyMs}ms ${result}${detail}`;
+}
+
+function formatElapsed(ms) {
+  const safe = Math.max(0, Number(ms) || 0);
+  const minutes = Math.floor(safe / 60000);
+  const seconds = Math.floor((safe % 60000) / 1000);
+  const millis = Math.floor(safe % 1000);
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+}
+
+function truncateOneLine(value, maxLen) {
+  const text = String(value).replace(/\s+/g, ' ').trim();
+  return text.length > maxLen ? text.slice(0, maxLen - 3) + '...' : text;
 }

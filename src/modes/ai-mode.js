@@ -176,7 +176,7 @@ export class AIMode {
 
     const latencyMs = Date.now() - start;
 
-    this.metrics.record({
+    const record = this.metrics.record({
       mode: 'ai',
       latencyMs,
       ttftMs,
@@ -190,6 +190,22 @@ export class AIMode {
       apiKeyIndex: keyIndex,
       retryCount: 0,
     });
+
+    this._log(formatRequestLog({
+      elapsedMs: record.timestamp - this.metrics.startTime,
+      index: this.metrics.counters.total,
+      workerId,
+      url: this.config.api_base,
+      statusCode,
+      isSuccess,
+      latencyMs,
+      ttftMs,
+      keyIndex,
+      inputTokens,
+      outputTokens,
+      errorType,
+      errorBody,
+    }));
 
     return { statusCode, isSuccess, latencyMs };
   }
@@ -208,4 +224,26 @@ function extractUsageFromSSE(buffer) {
     }
   } catch {}
   return null;
+}
+
+function formatRequestLog({ elapsedMs, index, workerId, url, statusCode, isSuccess, latencyMs, ttftMs, keyIndex, inputTokens, outputTokens, errorType, errorBody }) {
+  const status = statusCode || 'ERR';
+  const result = isSuccess ? 'OK' : `FAIL ${errorType || ''}`.trim();
+  const ttft = ttftMs ? ` TTFT=${ttftMs}ms` : '';
+  const usage = inputTokens || outputTokens ? ` tokens=${inputTokens}/${outputTokens}` : '';
+  const detail = errorBody ? ` | ${truncateOneLine(errorBody, 180)}` : '';
+  return `[${formatElapsed(elapsedMs)}] #${index} worker-${workerId} AI key-${keyIndex + 1} POST ${url} -> ${status} ${latencyMs}ms${ttft}${usage} ${result}${detail}`;
+}
+
+function formatElapsed(ms) {
+  const safe = Math.max(0, Number(ms) || 0);
+  const minutes = Math.floor(safe / 60000);
+  const seconds = Math.floor((safe % 60000) / 1000);
+  const millis = Math.floor(safe % 1000);
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+}
+
+function truncateOneLine(value, maxLen) {
+  const text = String(value).replace(/\s+/g, ' ').trim();
+  return text.length > maxLen ? text.slice(0, maxLen - 3) + '...' : text;
 }
