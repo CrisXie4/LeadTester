@@ -1,5 +1,6 @@
 import { TokenBucket } from '../core/rate-limiter.js';
 import { WorkerPool } from '../core/worker-pool.js';
+import crypto from 'crypto';
 
 /**
  * 纯 HTTP 压测模式 — 只给 URL，只看 RPM 和状态码
@@ -29,6 +30,7 @@ export class SimpleMode {
     this._log(`  时长: ${duration}s`);
     this._log(`  非200继续: ${config.stop_on_error ? '否' : '是'}`);
 
+    this._logRequestBodyConfig();
     this._startTime = Date.now();
     this._counters = { total: 0, success: 0, failure: 0, statusCodes: {}, errors: {} };
     this._recentErrors = [];
@@ -79,8 +81,9 @@ export class SimpleMode {
         headers: config.headers || {},
         signal: controller.signal,
       };
-      if (config.body && !['GET', 'HEAD'].includes(opts.method)) {
-        opts.body = config.body;
+      const requestBody = this._getRequestBody();
+      if (requestBody && !['GET', 'HEAD'].includes(opts.method.toUpperCase())) {
+        opts.body = requestBody;
       }
 
       const resp = await fetch(config.url, opts);
@@ -173,9 +176,66 @@ export class SimpleMode {
     if (this.onLog) this.onLog(msg);
   }
 
+  _logRequestBodyConfig() {
+    const { config } = this;
+    if (config.random_body_size) {
+      const bytes = parseSizeToBytes(config.random_body_size);
+      this._log(`  随机请求体: 每次请求生成 ${formatBytes(bytes)} (${bytes} bytes)`);
+    }
+  }
+
+  _getRequestBody() {
+    const { config } = this;
+    if (config.random_body_size) {
+      return randomBuffer(parseSizeToBytes(config.random_body_size));
+    }
+    return config.body || null;
+  }
+
   get metrics() {
     return { records: [] };
   }
+}
+
+function parseSizeToBytes(value) {
+  const text = String(value || '').trim().toLowerCase();
+  const match = text.match(/^(\d+(?:\.\d+)?)\s*(b|kb|k|mb|m|gb|g)?$/);
+  if (!match) {
+    throw new Error(`随机请求体大小格式不正确: ${value}，示例: 500mb`);
+  }
+
+  const n = Number(match[1]);
+  const unit = match[2] || 'b';
+  const multipliers = {
+    b: 1,
+    k: 1024,
+    kb: 1024,
+    m: 1024 ** 2,
+    mb: 1024 ** 2,
+    g: 1024 ** 3,
+    gb: 1024 ** 3,
+  };
+  const bytes = Math.floor(n * multipliers[unit]);
+  if (!Number.isSafeInteger(bytes) || bytes < 1) {
+    throw new Error(`随机请求体大小必须大于 0: ${value}`);
+  }
+  return bytes;
+}
+
+function randomBuffer(bytes) {
+  const buf = Buffer.allocUnsafe(bytes);
+  const chunkSize = 1024 * 1024;
+  for (let offset = 0; offset < bytes; offset += chunkSize) {
+    crypto.randomFillSync(buf, offset, Math.min(chunkSize, bytes - offset));
+  }
+  return buf;
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
 function formatRequestLog({ elapsedMs, index, workerId, method, url, statusCode, isSuccess, latencyMs, errorType, errorBody }) {

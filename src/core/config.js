@@ -56,6 +56,7 @@ const DEFAULT_CONFIG = {
     method: 'GET',
     headers: {},
     body: null,
+    random_body_size: null,
     target_rpm: 100,
     max_duration: 60,
     max_workers: 1000,

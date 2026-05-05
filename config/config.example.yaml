@@ -59,6 +59,7 @@ simple_config:
   headers:
     Content-Type: "application/json"
   body: null
+  random_body_size: null # e.g. "500mb"; overrides body when set
   target_rpm: 100
   max_duration: 60
   max_workers: 1000

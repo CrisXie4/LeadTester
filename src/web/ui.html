@@ -335,6 +335,11 @@
           <textarea id="simple-body" rows="2" placeholder='留空则无 body'></textarea>
         </div>
         <div class="form-group">
+          <label>随机请求体大小</label>
+          <input id="simple-random-body-size" placeholder="例如 500mb，留空则使用上面的请求体">
+          <div class="form-hint">仅 POST/PUT/DELETE 时发送；填写后会随机生成指定大小的数据</div>
+        </div>
+        <div class="form-group">
           <label>目标 RPM (每分钟请求数)</label>
           <input id="simple-rpm" type="number" value="100">
         </div>
@@ -463,6 +468,8 @@ let rpsHistory = [];
 let latencyHistory = [];
 const MAX_HISTORY = 120;
 let logOffset = 0;
+const FORM_CACHE_KEY = 'loadtester.form.cache.v1';
+let isRestoringFormCache = false;
 
 // ===== Navigation =====
 function switchTab(name) {
@@ -484,6 +491,7 @@ function switchMode(mode) {
   document.getElementById('config-ai').style.display = mode === 'ai' ? '' : 'none';
   document.getElementById('config-http').style.display = mode === 'http' ? '' : 'none';
   document.getElementById('config-simple').style.display = mode === 'simple' ? '' : 'none';
+  saveFormCache();
 }
 
 function toggleStepConfig() {
@@ -574,6 +582,7 @@ function buildSimpleConfig() {
       method: document.getElementById('simple-method').value,
       headers,
       body: document.getElementById('simple-body').value || undefined,
+      random_body_size: document.getElementById('simple-random-body-size').value.trim() || undefined,
       target_rpm: Number(document.getElementById('simple-rpm').value),
       max_duration: Number(document.getElementById('simple-duration').value),
       max_workers: Number(document.getElementById('simple-workers').value),
@@ -591,6 +600,7 @@ function buildSimpleConfig() {
 // ===== API Calls =====
 async function startTest() {
   const config = buildConfig();
+  saveFormCache(config);
   const btn = document.getElementById('btn-start');
   btn.disabled = true; btn.textContent = '启动中...';
 
@@ -768,6 +778,7 @@ async function loadConfigToForm() {
     if (s.method) document.getElementById('simple-method').value = s.method;
     if (s.headers) document.getElementById('simple-headers').value = JSON.stringify(s.headers, null, 2);
     if (s.body) document.getElementById('simple-body').value = s.body;
+    if (s.random_body_size) document.getElementById('simple-random-body-size').value = s.random_body_size;
     if (s.target_rpm) document.getElementById('simple-rpm').value = s.target_rpm;
     if (s.max_duration) document.getElementById('simple-duration').value = s.max_duration;
     if (s.max_workers) document.getElementById('simple-workers').value = s.max_workers;
@@ -849,6 +860,7 @@ function applyConfigToForm(c) {
   set('simple-method', s.method);
   setJson('simple-headers', s.headers);
   set('simple-body', s.body);
+  set('simple-random-body-size', s.random_body_size);
   set('simple-rpm', s.target_rpm);
   set('simple-duration', s.max_duration);
   set('simple-workers', s.max_workers);
@@ -1042,9 +1054,45 @@ function showToast(msg, type = '') {
   setTimeout(() => el.className = 'toast', 3000);
 }
 
+function saveFormCache(config = null) {
+  if (isRestoringFormCache) return;
+  try {
+    localStorage.setItem(FORM_CACHE_KEY, JSON.stringify(config || buildConfig()));
+  } catch {}
+}
+
+function loadFormCache() {
+  try {
+    const raw = localStorage.getItem(FORM_CACHE_KEY);
+    if (!raw) return;
+    isRestoringFormCache = true;
+    applyConfigToForm(JSON.parse(raw));
+  } catch {}
+  finally {
+    isRestoringFormCache = false;
+  }
+}
+
+function bindFormCache() {
+  document.querySelectorAll('input, select, textarea').forEach(el => {
+    el.addEventListener('change', () => saveFormCache());
+    el.addEventListener('input', debounce(() => saveFormCache(), 300));
+  });
+}
+
+function debounce(fn, wait) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), wait);
+  };
+}
+
 // ===== Init =====
 async function init() {
   connectWS();
+  loadFormCache();
+  bindFormCache();
   loadSettings();
 
   // Check current status
